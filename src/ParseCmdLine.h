@@ -12,7 +12,7 @@ struct ParseCmdLine {
         long long port{0};
 
         if (argc != 4) {
-            m_error = "Неверное число аргументов";
+            m_error = "Неверное число аргументов!\nВызов должен иметь следующий формат: yamr <file_name> <mnum> <rnum>";
             return;
         }
 
@@ -23,7 +23,7 @@ struct ParseCmdLine {
             m_is_valid = false;
             return;
         }
-        if (!str_to_num(argv[2], m_rnum)) {
+        if (!str_to_num(argv[3], m_rnum)) {
             m_error    = "Неверный параметр: rnum";
             m_is_valid = false;
             return;

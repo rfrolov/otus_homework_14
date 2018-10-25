@@ -4,8 +4,9 @@
 
 int main(int argc, char *argv[]) {
     ParseCmdLine parser(argc, argv);
-    if(!parser.is_valid()) {
+    if (!parser.is_valid()) {
         std::cerr << parser.error();
+        return 1;
     }
 
     MapReduce app{parser.file_name(), parser.mnum(), parser.rnum()};
