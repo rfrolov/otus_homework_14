@@ -9,15 +9,18 @@ struct MapReduce {
     void run();
 
 private:
+
     struct Block {
         size_t begin{};
         size_t end{};
     };
 
-    std::vector<Block> split(size_t mnum);
+    std::vector<Block> split(const std::string &file_name, size_t mnum);
+    std::vector<std::string> get_combinations(const std::string &str);
+    void map_worker(const std::string &file_name, const Block &block, std::vector<std::string> &result);
 
-    std::string        m_file_name;
-    size_t             m_mnum;
-    size_t             m_rnum;
-    std::vector<Block> m_blocks;
+    std::string m_file_name;
+    size_t      m_mnum;
+    size_t      m_rnum;
+
 };

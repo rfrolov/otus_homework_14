@@ -9,7 +9,11 @@ int main(int argc, char *argv[]) {
     }
 
     MapReduce app{parser.file_name(), parser.mnum(), parser.rnum()};
-    app.run();
-
+    try {
+        app.run();
+    }
+    catch (const std::exception &e) {
+        std::cerr << e.what() << std::endl;
+    }
     return 0;
 }

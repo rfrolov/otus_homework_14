@@ -1,27 +1,30 @@
 #include "MapReduce.h"
 #include <fstream>
+#include <thread>
 
 #include <iostream>
+#include <algorithm>
+#include <sstream>
+#include <future>
 
 
-MapReduce::MapReduce(const std::string &file_name, size_t mnum, size_t rnum) : m_file_name{file_name}, m_mnum{mnum}, m_rnum{rnum}, m_blocks{} {
-    m_blocks.resize(m_mnum);
+MapReduce::MapReduce(const std::string &file_name, size_t mnum, size_t rnum) : m_file_name{file_name}, m_mnum{mnum}, m_rnum{rnum} {
 }
 
 void MapReduce::run() {
-    try {
-        m_blocks = split(m_mnum);
-    }
-    catch (const std::exception &e) {
-        std::cerr << e.what() << std::endl;
-    }
+    auto blocks = split(m_file_name, m_mnum);
+
+    std::vector<std::string> result{};
+
+//    for(auto i = 0; i < m_mnum; ++i) {
+//        std::async(map_worker, std::cref(m_file_name), std::cref(blocks[i]), std::ref(result));
+//    }
 }
 
-std::vector<MapReduce::Block> MapReduce::split(size_t mnum) {
-    std::vector<MapReduce::Block> blocks;
-    blocks.resize(mnum);
+std::vector<MapReduce::Block> MapReduce::split(const std::string &file_name, size_t mnum) {
+    std::vector<Block> blocks(mnum);
 
-    std::ifstream fs(m_file_name);
+    std::ifstream fs(file_name);
     if (!fs.is_open()) {
         throw std::invalid_argument("Файл не может быть открыт");
     }
@@ -58,4 +61,42 @@ std::vector<MapReduce::Block> MapReduce::split(size_t mnum) {
     fs.close();
 
     return std::move(blocks);
+}
+
+std::vector<std::string> MapReduce::get_combinations(const std::string &str) {
+    std::vector<std::string> result;
+
+    std::generate_n(std::back_inserter(result), str.size(), [&str, i = size_t{0}]() mutable {
+        return str.substr(0, ++i);
+    });
+
+    return std::move(result);
+}
+
+void MapReduce::map_worker(const std::string &file_name, const Block &block, std::vector<std::string> &result) {
+    std::ifstream fs(file_name);
+    if (!fs.is_open()) {
+        throw std::invalid_argument("Can't open file: " + file_name);
+    }
+
+    size_t block_size = (block.end - block.begin) + 1;
+    fs.seekg(block.begin, std::ios::beg);
+    std::string str{};
+    str.resize(block_size);
+    fs.read(&str[0], block_size);
+    fs.close();
+
+    std::transform(str.begin(), str.end(), str.begin(), ::tolower);
+
+    std::istringstream ss(str);
+    std::string        line;
+
+    while (std::getline(ss, line)) {
+        if (!line.empty()) {
+            auto combinations = get_combinations(line);
+            result.insert(result.cend(), std::make_move_iterator(combinations.begin()), std::make_move_iterator(combinations.end()));
+        }
+    }
+
+    std::sort(result.begin(), result.end());
 }
