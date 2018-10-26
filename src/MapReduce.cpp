@@ -1,12 +1,11 @@
 #include "MapReduce.h"
 #include <fstream>
 #include <thread>
-
-#include <iostream>
 #include <algorithm>
 #include <sstream>
 #include <future>
-
+#include "Reduce.h"
+#include "Map.h"
 
 MapReduce::MapReduce(const std::string &file_name, size_t mnum, size_t rnum) :
         m_file_name{file_name}
@@ -26,7 +25,6 @@ void MapReduce::run() {
         map_futures[i] = (std::async(
                 [this, &file_name = m_file_name, &block = blocks[i]] { return map_worker(file_name, block); }));
     }
-    blocks.clear();
 
 
     // Shuffle
@@ -45,26 +43,33 @@ void MapReduce::run() {
                     return shuffle_worker(map_future, mutexes, worker_result);
                 }));
     }
-    for (auto i = 0; i < m_mnum; ++i) {
-        if (shuffle_threads[i].joinable()) {
-            shuffle_threads[i].join();
-        }
+    for (auto &thread : shuffle_threads) {
+        if (thread.joinable()) { thread.join(); }
     }
 
 
     // reduce
-    std::vector<std::thread> reduce_threads(m_rnum);
+    for (size_t i = 0; i < m_mnum; ++i) {
+        shuffle_threads[i] = (std::thread(
+                [this, i, data = std::ref(shuffle_result[i])] { return reduce_worker(i, data); }));
+    }
 
-    for (size_t i = 0; i < m_rnum; ++i) {
-        reduce_threads[i] = (std::thread(
-                [this, i, data = std::ref(shuffle_result[i])] {
-                    return reduce_worker(i, data);
-                }));
+    for (auto &thread : shuffle_threads) {
+        if (thread.joinable()) { thread.join(); }
     }
 }
 
 void MapReduce::reduce_worker(size_t id, std::vector<std::string> &data) {
+    Reduce    reduce;
+    size_t    result{};
+    for (auto &line:data) {
+        result = reduce(line);
+    }
 
+    std::string   file_name = "reduce_" + std::to_string(id) + ".txt";
+    std::ofstream fs(file_name);
+    fs << result << std::endl;
+    fs.close();
 }
 
 std::vector<MapReduce::Block> MapReduce::split(const std::string &file_name, size_t mnum) {
@@ -109,23 +114,9 @@ std::vector<MapReduce::Block> MapReduce::split(const std::string &file_name, siz
     return std::move(blocks);
 }
 
-std::vector<std::string> MapReduce::get_combinations(const std::string &str) {
-    std::vector<std::string> result;
-
-    std::generate_n(std::back_inserter(result), str.size(), [&str, i = size_t{0}]() mutable {
-        return str.substr(0, ++i);
-    });
-
-    return std::move(result);
-}
-
 std::vector<std::string> MapReduce::map_worker(const std::string &file_name, const Block &block) {
     std::vector<std::string> result{};
     std::ifstream            fs(file_name);
-
-    if (!fs.is_open()) {
-        throw std::invalid_argument("Невозможно открыть: " + file_name);
-    }
 
     size_t block_size = (block.end - block.begin) + 1;
     fs.seekg(block.begin, std::ios::beg);
@@ -139,6 +130,7 @@ std::vector<std::string> MapReduce::map_worker(const std::string &file_name, con
     std::istringstream ss(str);
     std::string        line;
 
+    Map get_combinations;
     while (std::getline(ss, line)) {
         if (!line.empty()) {
             auto combinations = get_combinations(line);
@@ -159,8 +151,7 @@ void MapReduce::shuffle_worker(std::future<std::vector<std::string>> &map_future
 
     for (const auto &note:map_result) {
 
-        std::hash<std::string>      hashFunction;
-        auto                        index = hashFunction(note) % rnum;
+        auto                        index = note[0] % rnum;
         std::lock_guard<std::mutex> lock(*mutexes[index]);
         worker_result[index].emplace_back(note);
     }
